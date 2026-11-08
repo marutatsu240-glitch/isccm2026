@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light only">
 <title>Cell-Based Texture Map</title>
 <meta name="description" content="Rotatable 3D plot of hardness, cohesiveness and adhesiveness for every condition (ISCCM 2026, poster #42).">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -25,18 +26,8 @@
   --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
   --radius: 10px;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0f1319; --surface: #171c24; --fg: #e8ebf0; --muted: #a2aab6; --line: #2a313c;
-    --grid: #343c48; --navy: #9cc0f0; --accent: #f07a45; --chip-off: #222833; --chicken: #b3b0a8;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #0f1319; --surface: #171c24; --fg: #e8ebf0; --muted: #a2aab6; --line: #2a313c;
-  --grid: #343c48; --navy: #9cc0f0; --accent: #f07a45; --chip-off: #222833; --chicken: #b3b0a8;
-  color-scheme: dark;
+  /* Always light, to match the printed poster, even when the phone is in dark mode. */
+  color-scheme: light;
 }
 * { box-sizing: border-box; }
 :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--bg); }
