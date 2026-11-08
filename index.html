@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cell-Based Texture Map</title>
+<meta name="description" content="Rotatable 3D plot of hardness, cohesiveness and adhesiveness for every condition (ISCCM 2026, poster #42).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow column, phone first. Header → controls → the 3D plot (the page's one big object) → readout of the tapped point → how to read → methods. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #12161d;
+  --muted: #555c68;
+  --line: #dde1e7;
+  --grid: #d3d8df;
+  --navy: #0b2e59;
+  --accent: #d95926;
+  --chip-off: #eceef2;
+  --chicken: #8a8882;
+  --font-display: "Newsreader", "Georgia", "Times New Roman", serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1319; --surface: #171c24; --fg: #e8ebf0; --muted: #a2aab6; --line: #2a313c;
+    --grid: #343c48; --navy: #9cc0f0; --accent: #f07a45; --chip-off: #222833; --chicken: #b3b0a8;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1319; --surface: #171c24; --fg: #e8ebf0; --muted: #a2aab6; --line: #2a313c;
+  --grid: #343c48; --navy: #9cc0f0; --accent: #f07a45; --chip-off: #222833; --chicken: #b3b0a8;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--bg); }
+[hidden] { display: none !important; }
+body {
+  margin: 0; -webkit-text-size-adjust: 100%;
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+}
+.wrap {
+  max-width: 920px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+.wrap > * { min-width: 0; max-width: 100%; }
+header { display: flex; flex-direction: column; gap: 6px; }
+.eyebrow {
+  font-family: var(--font-data); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--accent);
+}
+h1 {
+  font-family: var(--font-display); font-weight: 600; font-size: clamp(26px, 6vw, 38px);
+  line-height: 1.12; margin: 0; color: var(--navy); text-wrap: balance;
+}
+.sub { margin: 0; color: var(--muted); font-size: 14px; max-width: 65ch; }
+.sub i { font-style: italic; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.group { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.group-label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); padding: 3px; }
+.seg button {
+  font: inherit; font-size: 14px; border: 0; background: transparent; color: var(--fg);
+  padding: 6px 14px; border-radius: 999px; cursor: pointer; min-height: 34px;
+}
+.seg button[aria-pressed="true"] { background: var(--navy); color: var(--bg); font-weight: 700; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font: inherit; font-size: 14px; display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+  padding: 5px 12px 5px 9px; border-radius: 999px; cursor: pointer; min-height: 34px;
+}
+.chip[aria-pressed="false"] { background: var(--chip-off); color: var(--muted); }
+.chip[aria-pressed="false"] .sym { opacity: 0.3; }
+.chip i { font-style: italic; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.sym { width: 12px; height: 12px; flex: none; background: var(--c); }
+.sym.circle { border-radius: 50%; }
+.sym.diamond { transform: rotate(45deg) scale(0.85); }
+.sym.square { border-radius: 1px; transform: scale(0.85); }
+.sym.box { background: color-mix(in srgb, var(--c) 35%, transparent); border: 1.5px solid var(--c); border-radius: 2px; }
+.sym.prelim { width: 18px; height: 4px; background: repeating-linear-gradient(90deg, var(--c) 0 3px, transparent 3px 6px); }
+
+.plot-card {
+  position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  overflow: hidden;
+}
+#plot { width: 100%; max-width: 100%; height: min(68vh, 620px); min-height: 360px; }
+.plot-tools {
+  position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; z-index: 2;
+}
+.plot-tools button {
+  font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+  border-radius: 999px; padding: 4px 12px; cursor: pointer; min-height: 30px;
+}
+.hint { position: absolute; left: 12px; bottom: 8px; font-size: 12px; color: var(--muted); pointer-events: none; }
+#loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; }
+
+.readout {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;
+}
+.readout-head { display: flex; align-items: center; gap: 8px; font-weight: 700; flex-wrap: wrap; }
+.readout-head .meta { font-weight: 400; color: var(--muted); font-size: 14px; }
+.vals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.val { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.val .k { font-size: 12px; color: var(--muted); }
+.val .v { font-family: var(--font-data); font-size: 17px; font-variant-numeric: tabular-nums; font-weight: 500; }
+.val .v small { font-size: 12px; color: var(--muted); font-weight: 400; }
+.val .r { font-family: var(--font-data); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 460px) { .val .v { font-size: 15px; } }
+
+section h2 {
+  font-family: var(--font-display); font-weight: 600; font-size: 21px; margin: 0 0 8px; color: var(--navy);
+}
+.key { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: center; font-size: 15px; }
+.key svg { display: block; }
+.notes { color: var(--muted); font-size: 14px; max-width: 70ch; margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">ISCCM 2026 · Maastricht · Poster #42</div>
+    <h1>Every condition in one texture space</h1>
+    <p class="sub">Hardness, cohesiveness and adhesiveness of TG-crosslinked DF-1 cell constructs with four additives, compared with chicken tenderloin. Tatsuya Nishimaru, Kanta Komine, Tsukasa Hara, Tatsuya Shimizu, Katsuhisa Sakaguchi.</p>
+  </header>
+
+  <div class="controls" role="group" aria-label="Plot filters">
+    <div class="group">
+      <span class="group-label" id="lab-heat">Sample</span>
+      <div class="seg" aria-labelledby="lab-heat">
+        <button type="button" id="heat-after" data-heat="after" aria-pressed="true">Heated</button>
+        <button type="button" id="heat-before" data-heat="before" aria-pressed="false">Unheated</button>
+      </div>
+    </div>
+    <div class="group">
+      <span class="group-label" id="lab-tg">TG</span>
+      <div class="seg" aria-labelledby="lab-tg">
+        <button type="button" id="tg-both" data-tg="both" aria-pressed="true">Both</button>
+        <button type="button" id="tg-10" data-tg="10" aria-pressed="false">10 wt%</button>
+        <button type="button" id="tg-5" data-tg="5" aria-pressed="false">5 wt%</button>
+      </div>
+    </div>
+    <div class="group" style="flex: 1 1 100%;">
+      <span class="group-label">Additives (tap to hide or show)</span>
+      <div class="chips" id="chips"></div>
+    </div>
+  </div>
+
+  <div class="plot-card">
+    <div id="plot" aria-label="3D scatter plot of hardness, cohesiveness and adhesiveness"></div>
+    <div id="loading">Loading the 3D plot…</div>
+    <div class="plot-tools"><button type="button" id="reset">Reset view</button></div>
+    <div class="hint">Drag to rotate · pinch or scroll to zoom · tap a point</div>
+  </div>
+
+  <div class="readout" id="readout" aria-live="polite"></div>
+
+  <section>
+    <h2>How to read it</h2>
+    <div class="key" id="key"></div>
+  </section>
+
+  <section>
+    <h2>Methods</h2>
+    <ul class="notes">
+      <li>DF-1 cells were crosslinked with microbial transglutaminase (TG, 5 or 10 wt% of cell wet weight) in a mold, Φ10 × 2 mm. Additives: 0, 1, 5 or 10 wt% of cell wet weight.</li>
+      <li>Heating: in water at 95 °C for 1 min. Texture profile analysis (TPA): two compressions with a Φ6 mm flat plunger.</li>
+      <li>Points are means of experiments (n = 3 for most conditions); tap a point to see mean ± SD and n. The grey box is chicken tenderloin, mean ± SD.</li>
+      <li>Cell powder 20 wt% was measured in one preliminary experiment (n = 1) and has no SD. Hide it with its button to zoom the axes back to the main data.</li>
+      <li>Axes keep the same scale for heated and unheated samples, so you can see how heating moves each condition.</li>
+    </ul>
+  </section>
+
+  <footer>Tokyo City University · Tokyo Women's Medical University (TWIns). Data: means of TPA measurements, 2026.</footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-gl3d-dist-min@2.35.2/plotly-gl3d.min.js"></script>
+<script>
+const DATA = {"series":[{"additive":"soy","tg":10,"heating":"after","points":[{"n":3,"hard":149.8333,"hard_sd":23.9082,"coh":0.892,"coh_sd":0.0314,"adh":1.5755,"adh_sd":1.5192,"conc":0.0},{"n":3,"hard":167.8667,"hard_sd":35.561,"coh":0.9997,"coh_sd":0.0319,"adh":3.5977,"adh_sd":1.7378,"conc":1.0},{"n":3,"hard":244.4333,"hard_sd":33.6012,"coh":0.999,"coh_sd":0.1078,"adh":1.8813,"adh_sd":1.2269,"conc":5.0},{"n":3,"hard":311.1333,"hard_sd":32.5002,"coh":1.0037,"coh_sd":0.0945,"adh":0.1767,"adh_sd":0.306,"conc":10.0}]},{"additive":"soy","tg":5,"heating":"after","points":[{"n":3,"hard":95.1433,"hard_sd":7.9552,"coh":0.7613,"coh_sd":0.0789,"adh":0.9422,"adh_sd":0.8764,"conc":0.0},{"n":3,"hard":135.5333,"hard_sd":21.4143,"coh":0.8993,"coh_sd":0.1349,"adh":2.4866,"adh_sd":2.6908,"conc":1.0},{"n":3,"hard":210.5333,"hard_sd":28.7863,"coh":0.8713,"coh_sd":0.1181,"adh":2.2185,"adh_sd":2.1238,"conc":5.0},{"n":3,"hard":339.1,"hard_sd":68.003,"coh":0.8493,"coh_sd":0.0448,"adh":0.8067,"adh_sd":0.6285,"conc":10.0}]},{"additive":"anabaena","tg":10,"heating":"after","points":[{"n":3,"hard":153.5667,"hard_sd":8.2373,"coh":0.9737,"coh_sd":0.0436,"adh":2.1961,"adh_sd":1.3083,"conc":0.0},{"n":3,"hard":176.5667,"hard_sd":22.6418,"coh":0.895,"coh_sd":0.0098,"adh":3.0297,"adh_sd":1.2594,"conc":1.0},{"n":3,"hard":165.0667,"hard_sd":39.2378,"coh":0.7573,"coh_sd":0.1279,"adh":1.3008,"adh_sd":0.4527,"conc":5.0},{"n":3,"hard":148.3667,"hard_sd":44.6959,"coh":0.5923,"coh_sd":0.2374,"adh":2.896,"adh_sd":0.7782,"conc":10.0}]},{"additive":"anabaena","tg":5,"heating":"after","points":[{"n":3,"hard":87.9267,"hard_sd":7.3184,"coh":0.7543,"coh_sd":0.179,"adh":1.4504,"adh_sd":1.3134,"conc":0.0},{"n":3,"hard":87.79,"hard_sd":3.3274,"coh":0.7567,"coh_sd":0.1327,"adh":1.3584,"adh_sd":0.8052,"conc":1.0},{"n":3,"hard":91.17,"hard_sd":10.0129,"coh":0.5183,"coh_sd":0.1238,"adh":2.409,"adh_sd":2.0453,"conc":5.0},{"n":3,"hard":82.3733,"hard_sd":18.5826,"coh":0.4493,"coh_sd":0.0598,"adh":2.928,"adh_sd":0.7943,"conc":10.0}]},{"additive":"euglena","tg":10,"heating":"after","points":[{"n":3,"hard":166.0333,"hard_sd":48.2188,"coh":0.906,"coh_sd":0.0886,"adh":2.3243,"adh_sd":1.5378,"conc":0.0},{"n":3,"hard":179.4667,"hard_sd":44.1151,"coh":0.947,"coh_sd":0.05,"adh":3.286,"adh_sd":0.316,"conc":1.0},{"n":3,"hard":199.1667,"hard_sd":22.108,"coh":0.8817,"coh_sd":0.0616,"adh":4.5697,"adh_sd":2.5301,"conc":5.0},{"n":3,"hard":270.0,"hard_sd":29.344,"coh":0.943,"coh_sd":0.0716,"adh":5.8967,"adh_sd":2.2987,"conc":10.0}]},{"additive":"euglena","tg":5,"heating":"after","points":[{"n":3,"hard":105.63,"hard_sd":29.4142,"coh":0.6893,"coh_sd":0.1695,"adh":1.3704,"adh_sd":0.9048,"conc":0.0},{"n":3,"hard":101.4633,"hard_sd":11.2402,"coh":0.6583,"coh_sd":0.1409,"adh":1.4588,"adh_sd":0.8478,"conc":1.0},{"n":3,"hard":109.4267,"hard_sd":15.0505,"coh":0.6943,"coh_sd":0.1583,"adh":3.295,"adh_sd":1.54,"conc":5.0},{"n":3,"hard":125.4667,"hard_sd":11.3531,"coh":0.791,"coh_sd":0.0973,"adh":4.7693,"adh_sd":3.2013,"conc":10.0}]},{"additive":"cell powder","tg":10,"heating":"after","points":[{"n":3,"hard":148.2,"hard_sd":6.9656,"coh":0.854,"coh_sd":0.1438,"adh":3.0227,"adh_sd":1.7378,"conc":0.0},{"n":3,"hard":148.3667,"hard_sd":7.089,"coh":0.868,"coh_sd":0.0269,"adh":1.8229,"adh_sd":1.076,"conc":1.0},{"n":3,"hard":181.7333,"hard_sd":11.6629,"coh":0.8577,"coh_sd":0.0494,"adh":4.0677,"adh_sd":0.1511,"conc":5.0},{"n":3,"hard":193.3,"hard_sd":12.5391,"coh":0.6373,"coh_sd":0.0919,"adh":3.4593,"adh_sd":2.8225,"conc":10.0}],"prelim":{"n":1,"hard":315.2,"hard_sd":0.0,"coh":0.798,"coh_sd":0.0,"adh":10.98,"adh_sd":0.0,"conc":20.0}},{"additive":"cell powder","tg":5,"heating":"after","points":[{"n":3,"hard":147.1,"hard_sd":27.9737,"coh":0.796,"coh_sd":0.1863,"adh":4.0348,"adh_sd":3.81,"conc":0.0},{"n":3,"hard":143.8,"hard_sd":27.8796,"coh":0.846,"coh_sd":0.0215,"adh":8.6903,"adh_sd":6.2704,"conc":1.0},{"n":3,"hard":188.3,"hard_sd":38.2525,"coh":0.68,"coh_sd":0.1894,"adh":1.6665,"adh_sd":1.307,"conc":5.0},{"n":3,"hard":205.1,"hard_sd":72.469,"coh":0.6247,"coh_sd":0.203,"adh":4.9493,"adh_sd":4.9373,"conc":10.0}],"prelim":{"n":1,"hard":459.6,"hard_sd":0.0,"coh":0.831,"coh_sd":0.0,"adh":8.533,"adh_sd":0.0,"conc":20.0}},{"additive":"soy","tg":10,"heating":"before","points":[{"n":3,"hard":70.7633,"hard_sd":25.73,"coh":0.405,"coh_sd":0.1238,"adh":0.2767,"adh_sd":0.1689,"conc":0.0},{"n":3,"hard":87.24,"hard_sd":13.0714,"coh":0.4593,"coh_sd":0.1803,"adh":0.589,"adh_sd":1.0202,"conc":1.0},{"n":3,"hard":87.9333,"hard_sd":48.1805,"coh":0.6213,"coh_sd":0.2516,"adh":4.4037,"adh_sd":6.8607,"conc":5.0},{"n":3,"hard":174.6667,"hard_sd":11.218,"coh":0.6887,"coh_sd":0.128,"adh":2.7553,"adh_sd":2.6719,"conc":10.0}]},{"additive":"soy","tg":5,"heating":"before","points":[{"n":3,"hard":28.4567,"hard_sd":4.3686,"coh":0.645,"coh_sd":0.0767,"adh":1.0798,"adh_sd":0.3903,"conc":0.0},{"n":3,"hard":45.77,"hard_sd":3.4452,"coh":0.6623,"coh_sd":0.1153,"adh":1.8747,"adh_sd":0.5932,"conc":1.0},{"n":3,"hard":67.1133,"hard_sd":19.497,"coh":0.5063,"coh_sd":0.147,"adh":1.1218,"adh_sd":0.904,"conc":5.0},{"n":3,"hard":136.8,"hard_sd":28.6047,"coh":0.4973,"coh_sd":0.0663,"adh":1.8877,"adh_sd":0.1914,"conc":10.0}]},{"additive":"anabaena","tg":10,"heating":"before","points":[{"n":3,"hard":81.1767,"hard_sd":10.704,"coh":0.423,"coh_sd":0.1516,"adh":0.2133,"adh_sd":0.1376,"conc":0.0},{"n":3,"hard":88.8033,"hard_sd":31.7062,"coh":0.4413,"coh_sd":0.083,"adh":0.3242,"adh_sd":0.177,"conc":1.0},{"n":3,"hard":52.4033,"hard_sd":19.138,"coh":0.6107,"coh_sd":0.192,"adh":4.4678,"adh_sd":5.8069,"conc":5.0},{"n":3,"hard":47.83,"hard_sd":18.7027,"coh":0.8347,"coh_sd":0.0208,"adh":6.6117,"adh_sd":4.4458,"conc":10.0}]},{"additive":"anabaena","tg":5,"heating":"before","points":[{"n":3,"hard":22.9367,"hard_sd":5.1187,"coh":0.6353,"coh_sd":0.1684,"adh":2.5387,"adh_sd":0.8842,"conc":0.0},{"n":3,"hard":22.5133,"hard_sd":3.5766,"coh":0.7177,"coh_sd":0.165,"adh":1.1732,"adh_sd":0.5989,"conc":1.0},{"n":3,"hard":16.7233,"hard_sd":2.6781,"coh":0.6673,"coh_sd":0.0754,"adh":2.5747,"adh_sd":0.7759,"conc":5.0},{"n":3,"hard":17.2433,"hard_sd":5.9499,"coh":0.7667,"coh_sd":0.1339,"adh":4.1667,"adh_sd":2.1446,"conc":10.0}]},{"additive":"euglena","tg":10,"heating":"before","points":[{"n":3,"hard":103.1467,"hard_sd":19.8379,"coh":0.4467,"coh_sd":0.0657,"adh":0.5632,"adh_sd":0.4979,"conc":0.0},{"n":3,"hard":118.8867,"hard_sd":41.8091,"coh":0.5617,"coh_sd":0.074,"adh":1.2316,"adh_sd":1.3039,"conc":1.0},{"n":3,"hard":91.8467,"hard_sd":40.2168,"coh":0.4897,"coh_sd":0.1036,"adh":0.6772,"adh_sd":0.5695,"conc":5.0},{"n":3,"hard":177.97,"hard_sd":92.3533,"coh":0.7637,"coh_sd":0.1706,"adh":5.1193,"adh_sd":3.0323,"conc":10.0}]},{"additive":"euglena","tg":5,"heating":"before","points":[{"n":3,"hard":31.2133,"hard_sd":23.278,"coh":0.6363,"coh_sd":0.1213,"adh":2.1487,"adh_sd":0.4793,"conc":0.0},{"n":3,"hard":25.0767,"hard_sd":5.5856,"coh":0.7173,"coh_sd":0.0394,"adh":1.3107,"adh_sd":0.8341,"conc":1.0},{"n":3,"hard":21.0833,"hard_sd":3.8152,"coh":0.5147,"coh_sd":0.1989,"adh":1.7863,"adh_sd":0.8329,"conc":5.0},{"n":3,"hard":29.2933,"hard_sd":5.7855,"coh":0.6443,"coh_sd":0.051,"adh":3.573,"adh_sd":1.5348,"conc":10.0}]},{"additive":"cell powder","tg":10,"heating":"before","points":[{"n":3,"hard":96.0,"hard_sd":16.3196,"coh":0.4433,"coh_sd":0.1168,"adh":0.3303,"adh_sd":0.0895,"conc":0.0},{"n":3,"hard":93.5633,"hard_sd":18.8364,"coh":0.4677,"coh_sd":0.0542,"adh":0.2929,"adh_sd":0.4133,"conc":1.0},{"n":3,"hard":47.5933,"hard_sd":5.6516,"coh":0.576,"coh_sd":0.1033,"adh":1.6783,"adh_sd":0.7694,"conc":5.0},{"n":3,"hard":37.94,"hard_sd":14.7327,"coh":0.6077,"coh_sd":0.0405,"adh":5.2187,"adh_sd":0.8785,"conc":10.0}],"prelim":{"n":1,"hard":47.7,"hard_sd":0.0,"coh":0.616,"coh_sd":0.0,"adh":11.26,"adh_sd":0.0,"conc":20.0}},{"additive":"cell powder","tg":5,"heating":"before","points":[{"n":3,"hard":40.6133,"hard_sd":3.1296,"coh":0.8483,"coh_sd":0.3724,"adh":1.8342,"adh_sd":1.0823,"conc":0.0},{"n":3,"hard":42.78,"hard_sd":13.138,"coh":0.644,"coh_sd":0.1129,"adh":1.9107,"adh_sd":0.6944,"conc":1.0},{"n":3,"hard":27.7,"hard_sd":10.3075,"coh":0.7657,"coh_sd":0.0934,"adh":3.7057,"adh_sd":0.3606,"conc":5.0},{"n":3,"hard":34.43,"hard_sd":19.4161,"coh":0.822,"coh_sd":0.1293,"adh":10.9567,"adh_sd":7.3035,"conc":10.0}],"prelim":{"n":1,"hard":68.27,"hard_sd":0.0,"coh":0.765,"coh_sd":0.0,"adh":16.96,"adh_sd":0.0,"conc":20.0}}],"chicken":{"after":{"n":3,"hard":309.8611,"hard_sd":50.9827,"coh":0.7021,"coh_sd":0.0364,"adh":0.7585,"adh_sd":0.9163},"before":{"n":3,"hard":123.575,"hard_sd":28.8403,"coh":0.6718,"coh_sd":0.0341,"adh":2.3628,"adh_sd":0.0838}}};
+
+const ADD = {
+  "soy":         { label: "Soy protein",      italic: false, color: "#2a78d6", sym: "circle" },
+  "anabaena":    { label: "Trichormus",       italic: true,  color: "#1baf7a", sym: "diamond" },
+  "euglena":     { label: "Euglena",          italic: true,  color: "#d4a20a", sym: "square" },
+  "cell powder": { label: "DF-1 cell powder", italic: false, color: "#eb6834", sym: "circle" }
+};
+const ORDER = ["soy", "anabaena", "euglena", "cell powder"];
+const SIZE = { 0: 6, 1: 8, 5: 11, 10: 14 };
+/* Axis ranges cover heated and unheated together (same scale in both views).
+   They widen only while the preliminary 20 wt% points are shown. */
+function ranges() {
+  const pts = [];
+  for (const s of DATA.series) {
+    pts.push(...s.points);
+    if (s.prelim && !state.hidden.has("prelim")) pts.push(s.prelim);
+  }
+  for (const h of ["after", "before"]) {
+    const c = DATA.chicken[h];
+    pts.push({ hard: c.hard + c.hard_sd, coh: c.coh + c.coh_sd, adh: c.adh + c.adh_sd },
+             { hard: c.hard - c.hard_sd, coh: c.coh - c.coh_sd, adh: 0 });
+  }
+  const mx = k => Math.max(...pts.map(p => p[k])), mn = k => Math.min(...pts.map(p => p[k]));
+  const hardHi = Math.ceil(mx("hard") * 1.04 / 20) * 20;
+  const adhHi = Math.ceil(mx("adh") * 1.05);
+  return {
+    hard: [0, hardHi], hardTick: hardHi > 400 ? 100 : 50,
+    adh: [0, adhHi], adhTick: adhHi > 12 ? 4 : 2,
+    coh: [Math.floor((mn("coh") - 0.03) * 20) / 20, Math.ceil((mx("coh") + 0.03) * 20) / 20]
+  };
+}
+/* Default view: adhesiveness 0 at the front, increasing toward the back (owner's request, 2026-11-08).
+   Seen from the front-left so the depth axis runs clearly away from the viewer. */
+const CAMERA = { eye: { x: -0.75, y: -2.15, z: 0.8 }, up: { x: 0, y: 0, z: 1 }, center: { x: 0, y: 0, z: -0.1 } };
+
+const state = { heat: "after", tg: "both", hidden: new Set(), sel: null };
+let camera = JSON.parse(JSON.stringify(CAMERA));
+
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function nameHTML(a) { const d = ADD[a]; return d.italic ? `<i>${d.label}</i>` : d.label; }
+function fmt(v, k) { return k === "hard" ? v.toFixed(0) : k === "coh" ? v.toFixed(2) : v.toFixed(2); }
+
+function buildChips() {
+  const el = document.getElementById("chips");
+  el.innerHTML = ORDER.map(a => `<button type="button" class="chip" id="chip-${a.replace(" ", "-")}" data-add="${a}" aria-pressed="true"><span class="sym ${ADD[a].sym}" style="--c:${ADD[a].color}"></span>${nameHTML(a)}</button>`).join("")
+    + `<button type="button" class="chip" id="chip-chicken" data-add="chicken" aria-pressed="true"><span class="sym box" style="--c:var(--chicken)"></span>Chicken tenderloin</button>`
+    + `<button type="button" class="chip" id="chip-prelim" data-add="prelim" aria-pressed="true"><span class="sym prelim" style="--c:${ADD["cell powder"].color}"></span>Cell powder 20 wt% (preliminary, n = 1)</button>`;
+  el.addEventListener("click", e => {
+    const b = e.target.closest(".chip"); if (!b) return;
+    const a = b.dataset.add;
+    if (state.hidden.has(a)) state.hidden.delete(a); else state.hidden.add(a);
+    b.setAttribute("aria-pressed", String(!state.hidden.has(a)));
+    render();
+  });
+}
+
+function buildKey() {
+  const fg = "currentColor";
+  const dot = (r, filled) => `<circle cx="${r + 2}" cy="12" r="${r}" fill="${filled ? fg : "none"}" stroke="${fg}" stroke-width="1.6"/>`;
+  document.getElementById("key").innerHTML = `
+    <svg width="96" height="24" viewBox="0 0 96 24" aria-hidden="true"><line x1="6" y1="12" x2="86" y2="12" stroke="${fg}" stroke-width="1.5" opacity="0.6"/>
+      <circle cx="6" cy="12" r="3" fill="${fg}"/><circle cx="30" cy="12" r="4" fill="${fg}"/><circle cx="56" cy="12" r="5.5" fill="${fg}"/><circle cx="86" cy="12" r="7" fill="${fg}"/></svg>
+    <span>Marker size = additive amount. The line runs 0 → 1 → 5 → 10 wt%.</span>
+    <svg width="96" height="24" viewBox="0 0 96 24" aria-hidden="true"><line x1="6" y1="12" x2="40" y2="12" stroke="${fg}" stroke-width="3"/><circle cx="40" cy="12" r="6" fill="${fg}"/>
+      <line x1="52" y1="12" x2="82" y2="12" stroke="${fg}" stroke-width="3" stroke-dasharray="6 4"/><circle cx="84" cy="12" r="6.5" fill="none" stroke="${fg}" stroke-width="2.2"/></svg>
+    <span>Filled with a solid line = TG 10 wt%. Open with a dashed line = TG 5 wt%.</span>
+    <svg width="96" height="24" viewBox="0 0 96 24" aria-hidden="true"><rect x="30" y="3" width="36" height="18" rx="2" fill="var(--chicken)" fill-opacity="0.3" stroke="var(--chicken)" stroke-width="1.5"/></svg>
+    <span>Chicken tenderloin, mean ± SD on each axis. Points near or inside the box have a chicken-like texture.</span>
+    <svg width="96" height="24" viewBox="0 0 96 24" aria-hidden="true"><line x1="10" y1="12" x2="78" y2="12" stroke="${ADD["cell powder"].color}" stroke-width="3" stroke-dasharray="1.5 4" stroke-linecap="round"/>
+      <path d="M78 6v12M72 12h12" stroke="${ADD["cell powder"].color}" stroke-width="2.4"/></svg>
+    <span>Dotted extension with a cross = cell powder 20 wt%, a preliminary single experiment (n = 1). Read it as a direction, not a result.</span>
+    <svg width="96" height="24" viewBox="0 0 96 24" aria-hidden="true"><text x="48" y="17" text-anchor="middle" font-size="12" fill="${fg}" font-family="IBM Plex Mono, monospace">↑ ↔ ↗</text></svg>
+    <span>Up = hardness (kPa). Across = cohesiveness. Depth = adhesiveness (kJ/m³): 0 at the front, stickier toward the back.</span>`;
+}
+
+function chickenBox(c) {
+  const x0 = c.coh - c.coh_sd, x1 = c.coh + c.coh_sd;
+  const y0 = Math.max(0, c.adh - c.adh_sd), y1 = c.adh + c.adh_sd;
+  const z0 = c.hard - c.hard_sd, z1 = c.hard + c.hard_sd;
+  const col = css("--chicken");
+  const hover = `<b>Chicken tenderloin</b><br>Hardness ${c.hard.toFixed(0)} ± ${c.hard_sd.toFixed(0)} kPa<br>Cohesiveness ${c.coh.toFixed(2)} ± ${c.coh_sd.toFixed(2)}<br>Adhesiveness ${c.adh.toFixed(2)} ± ${c.adh_sd.toFixed(2)} kJ/m³<br>n = ${c.n}<extra></extra>`;
+  const box = {
+    type: "mesh3d", name: "chicken-box",
+    x: [x0, x1, x1, x0, x0, x1, x1, x0], y: [y0, y0, y1, y1, y0, y0, y1, y1], z: [z0, z0, z0, z0, z1, z1, z1, z1],
+    i: [0, 0, 4, 4, 0, 0, 1, 1, 2, 2, 3, 3], j: [1, 2, 5, 6, 1, 5, 2, 6, 3, 7, 0, 4], k: [2, 3, 6, 7, 5, 4, 6, 5, 7, 6, 4, 7],
+    color: col, opacity: 0.22, flatshading: true, hovertemplate: hover, showscale: false,
+    lighting: { ambient: 1, diffuse: 0, specular: 0 }, customdata: [["chicken"]]
+  };
+  const ex = [[x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0],[x0,y0,z0],[NaN,NaN,NaN],[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1],[x0,y0,z1],[NaN,NaN,NaN],
+              [x0,y0,z0],[x0,y0,z1],[NaN,NaN,NaN],[x1,y0,z0],[x1,y0,z1],[NaN,NaN,NaN],[x1,y1,z0],[x1,y1,z1],[NaN,NaN,NaN],[x0,y1,z0],[x0,y1,z1]];
+  const edges = {
+    type: "scatter3d", mode: "lines", x: ex.map(p => p[0]), y: ex.map(p => p[1]), z: ex.map(p => p[2]),
+    line: { color: col, width: 2 }, hoverinfo: "skip", connectgaps: false
+  };
+  const center = {
+    type: "scatter3d", mode: "markers+text", x: [c.coh], y: [c.adh], z: [c.hard], text: ["Chicken"],
+    textposition: "top center", textfont: { color: css("--muted"), size: 12, family: css("--font-body") },
+    marker: { symbol: "x", size: 6, color: col }, hovertemplate: hover, customdata: [["chicken"]]
+  };
+  return [box, edges, center];
+}
+
+function traces() {
+  const out = [];
+  const ck = DATA.chicken[state.heat];
+  for (const s of DATA.series) {
+    if (s.heating !== state.heat || state.hidden.has(s.additive)) continue;
+    if (state.tg !== "both" && String(s.tg) !== state.tg) continue;
+    const d = ADD[s.additive], tg10 = s.tg === 10;
+    const pts = s.points;
+    const hover = pts.map(p =>
+      `<b>${d.label}</b> · TG ${s.tg}% · ${p.conc} wt%<br>` +
+      `Hardness ${p.hard.toFixed(0)} ± ${p.hard_sd.toFixed(0)} kPa<br>` +
+      `Cohesiveness ${p.coh.toFixed(2)} ± ${p.coh_sd.toFixed(2)}<br>` +
+      `Adhesiveness ${p.adh.toFixed(2)} ± ${p.adh_sd.toFixed(2)} kJ/m³<br>n = ${p.n}<extra></extra>`);
+    out.push({
+      type: "scatter3d", mode: "lines+markers", name: `${d.label} TG ${s.tg}%`,
+      x: pts.map(p => p.coh), y: pts.map(p => p.adh), z: pts.map(p => p.hard),
+      line: { color: d.color, width: 6, dash: tg10 ? "solid" : "dash" },
+      marker: {
+        symbol: tg10 ? d.sym : d.sym + "-open", size: pts.map(p => SIZE[p.conc] + (tg10 ? 0 : 2)),
+        color: d.color, opacity: 1, line: { color: css("--surface"), width: tg10 ? 1 : 0 }
+      },
+      hovertemplate: hover,
+      customdata: pts.map((p, i) => [s.additive, s.tg, i])
+    });
+    if (s.prelim && !state.hidden.has("prelim")) {
+      const a = pts[pts.length - 1], b = s.prelim;
+      const hv = `<b>${d.label}</b> · TG ${s.tg}% · 20 wt% · <b>preliminary, n = ${b.n}</b><br>` +
+        `Hardness ${b.hard.toFixed(0)} kPa<br>Cohesiveness ${b.coh.toFixed(2)}<br>Adhesiveness ${b.adh.toFixed(2)} kJ/m³<extra></extra>`;
+      out.push({
+        type: "scatter3d", mode: "lines+markers+text", name: `${d.label} TG ${s.tg}% 20%`,
+        x: [a.coh, b.coh], y: [a.adh, b.adh], z: [a.hard, b.hard], text: ["", "20%"],
+        textposition: "top center", textfont: { color: d.color, size: 12, family: css("--font-data") },
+        line: { color: d.color, width: 4, dash: "dot" },
+        marker: { symbol: tg10 ? "cross" : "x", size: [0, 9], color: d.color, opacity: 1 },
+        hovertemplate: [hv, hv], customdata: [[s.additive, s.tg, "p"], [s.additive, s.tg, "p"]]
+      });
+    }
+  }
+  if (!state.hidden.has("chicken")) out.push(...chickenBox(ck));
+  return out;
+}
+
+function layout() {
+  const fg = css("--fg"), muted = css("--muted"), grid = css("--grid"), surface = css("--surface");
+  const ax = (title, range, extra) => Object.assign({
+    title: { text: title, font: { size: 13, color: fg } }, range, autorange: false,
+    gridcolor: grid, zerolinecolor: grid, linecolor: muted, showbackground: true, backgroundcolor: surface,
+    tickfont: { size: 11, color: muted, family: css("--font-data") }, showspikes: false
+  }, extra || {});
+  const R = ranges();
+  return {
+    autosize: true, margin: { l: 0, r: 0, t: 0, b: 0 }, paper_bgcolor: surface, showlegend: false,
+    font: { family: css("--font-body"), color: fg },
+    hoverlabel: { bgcolor: surface, bordercolor: grid, font: { color: fg, size: 13, family: css("--font-body") }, align: "left" },
+    uirevision: "keep",
+    scene: {
+      xaxis: ax("Cohesiveness", R.coh, { dtick: 0.1 }),
+      yaxis: ax("Adhesiveness (kJ/m³)", R.adh, { dtick: R.adhTick }),
+      zaxis: ax("Hardness (kPa)", R.hard, { dtick: R.hardTick }),
+      aspectmode: "manual", aspectratio: { x: 1, y: 1, z: 1.05 },
+      camera, dragmode: "turntable"
+    }
+  };
+}
+
+function rel(v, c) { return `${(v / c).toFixed(2)}× chicken`; }
+
+function renderReadout() {
+  const el = document.getElementById("readout");
+  const ck = DATA.chicken[state.heat];
+  const heatTxt = state.heat === "after" ? "Heated" : "Unheated";
+  let head, p;
+  if (state.sel && state.sel[0] !== "chicken") {
+    const [a, tg, i] = state.sel;
+    const s = DATA.series.find(s => s.additive === a && s.tg === tg && s.heating === state.heat);
+    p = i === "p" ? s.prelim : s.points[i];
+    const tag = i === "p" ? " · <b>preliminary</b>" : "";
+    head = `<span class="sym ${ADD[a].sym}" style="--c:${ADD[a].color}"></span>${nameHTML(a)} <span class="meta">TG ${tg}% · additive ${p.conc} wt% · ${heatTxt} · n = ${p.n}${tag}</span>`;
+  } else {
+    p = ck;
+    head = `<span class="sym box" style="--c:var(--chicken)"></span>Chicken tenderloin <span class="meta">${heatTxt} · n = ${p.n} · tap any point to compare</span>`;
+  }
+  const isCk = p === ck;
+  const cell = (k, name, unit) => `<div class="val"><span class="k">${name}</span>
+      <span class="v">${fmt(p[k], k)}<small>${p.n > 1 ? " ± " + fmt(p[k + "_sd"], k) : ""}${unit ? " " + unit : ""}</small></span>
+      <span class="r">${isCk ? "reference" : rel(p[k], ck[k])}</span></div>`;
+  el.innerHTML = `<div class="readout-head">${head}</div><div class="vals">${cell("hard", "Hardness", "kPa")}${cell("coh", "Cohesiveness", "")}${cell("adh", "Adhesiveness", "kJ/m³")}</div>`;
+}
+
+let ready = false;
+function render() {
+  if (!window.Plotly) return;
+  const el = document.getElementById("plot");
+  if (!ready) {
+    Plotly.newPlot(el, traces(), layout(), { displayModeBar: false, responsive: true, scrollZoom: true });
+    el.on("plotly_click", ev => {
+      const pt = ev.points && ev.points[0]; if (!pt || !pt.customdata) return;
+      state.sel = pt.customdata[0] === "chicken" ? null : pt.customdata;
+      renderReadout();
+    });
+    el.on("plotly_relayout", ev => { if (ev["scene.camera"]) camera = ev["scene.camera"]; });
+    ready = true;
+    document.getElementById("loading").hidden = true;
+  } else {
+    Plotly.react(el, traces(), layout());
+  }
+  if (state.sel && state.sel[0] !== "chicken") {
+    const [a, tg] = state.sel;
+    if (state.hidden.has(a) || (state.tg !== "both" && String(tg) !== state.tg)
+        || (state.sel[2] === "p" && state.hidden.has("prelim"))) state.sel = null;
+  }
+  renderReadout();
+}
+
+function bindSeg(attr, key) {
+  document.querySelectorAll(`[data-${attr}]`).forEach(b => b.addEventListener("click", () => {
+    state[key] = b.dataset[attr];
+    document.querySelectorAll(`[data-${attr}]`).forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    render();
+  }));
+}
+
+buildChips(); buildKey(); bindSeg("heat", "heat"); bindSeg("tg", "tg");
+document.getElementById("reset").addEventListener("click", () => {
+  camera = JSON.parse(JSON.stringify(CAMERA));
+  if (ready) Plotly.relayout("plot", { "scene.camera": camera });
+});
+if (window.Plotly) render();
+else {
+  renderReadout();
+  document.getElementById("loading").textContent = "The 3D plot could not load. Check the connection and reload the page.";
+}
+const rerender = () => { if (ready) Plotly.react("plot", traces(), layout()); };
+try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rerender); } catch (e) {}
+new MutationObserver(rerender).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+</script>
+</body>
+</html>
