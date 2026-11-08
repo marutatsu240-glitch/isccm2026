@@ -98,6 +98,19 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   overflow: hidden;
 }
 #plot { width: 100%; max-width: 100%; height: min(68vh, 620px); min-height: 360px; }
+/* Phones: the plot runs edge to edge and is less tall, so the 3D scene is not cropped at the sides. */
+@media (max-width: 600px) {
+  .wrap > .plot-card {
+    max-width: none; border-radius: 0; border-left: 0; border-right: 0;
+    margin-left: calc(-1 * max(16px, env(safe-area-inset-left, 0px)));
+    margin-right: calc(-1 * max(16px, env(safe-area-inset-right, 0px)));
+    padding-bottom: 26px;
+  }
+  #plot { height: min(112vw, 68vh); min-height: 380px; }
+  .plot-tools { right: max(8px, env(safe-area-inset-right, 0px)); }
+  .hint { left: max(12px, env(safe-area-inset-left, 0px)); }
+  .val .v { font-size: 14px; }
+}
 .plot-tools {
   position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; z-index: 2;
 }
@@ -229,8 +242,15 @@ function ranges() {
    Seen from the front-left so the depth axis runs clearly away from the viewer. */
 const CAMERA = { eye: { x: -0.75, y: -2.15, z: 0.8 }, up: { x: 0, y: 0, z: 1 }, center: { x: 0, y: 0, z: -0.1 } };
 
+const NARROW = matchMedia("(max-width: 600px)");
+/* On phones, step the camera back so the whole box fits the narrow frame. */
+function startCamera() {
+  const c = JSON.parse(JSON.stringify(CAMERA));
+  if (NARROW.matches) for (const k of ["x", "y", "z"]) c.eye[k] *= 1.1;
+  return c;
+}
 const state = { heat: "after", tg: "both", hidden: new Set(), sel: null };
-let camera = JSON.parse(JSON.stringify(CAMERA));
+let camera = startCamera();
 
 function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 function nameHTML(a) { const d = ADD[a]; return d.italic ? `<i>${d.label}</i>` : d.label; }
@@ -340,10 +360,11 @@ function traces() {
 
 function layout() {
   const fg = css("--fg"), muted = css("--muted"), grid = css("--grid"), surface = css("--surface");
+  const small = NARROW.matches;
   const ax = (title, range, extra) => Object.assign({
-    title: { text: title, font: { size: 13, color: fg } }, range, autorange: false,
+    title: { text: title, font: { size: small ? 11 : 13, color: fg } }, range, autorange: false,
     gridcolor: grid, zerolinecolor: grid, linecolor: muted, showbackground: true, backgroundcolor: surface,
-    tickfont: { size: 11, color: muted, family: css("--font-data") }, showspikes: false
+    tickfont: { size: small ? 9 : 11, color: muted, family: css("--font-data") }, showspikes: false
   }, extra || {});
   const R = ranges();
   return {
@@ -420,7 +441,7 @@ function bindSeg(attr, key) {
 
 buildChips(); buildKey(); bindSeg("heat", "heat"); bindSeg("tg", "tg");
 document.getElementById("reset").addEventListener("click", () => {
-  camera = JSON.parse(JSON.stringify(CAMERA));
+  camera = startCamera();
   if (ready) Plotly.relayout("plot", { "scene.camera": camera });
 });
 if (window.Plotly) render();
@@ -430,6 +451,7 @@ else {
 }
 const rerender = () => { if (ready) Plotly.react("plot", traces(), layout()); };
 try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rerender); } catch (e) {}
+try { NARROW.addEventListener("change", () => { camera = startCamera(); rerender(); }); } catch (e) {}
 new MutationObserver(rerender).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 </script>
 </body>
